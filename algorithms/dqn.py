@@ -123,7 +123,17 @@ class ReplayBuffer:
 
         """
         # ==================== YOUR CODE HERE (Part 1a) ====================
-        raise NotImplementedError("Implement ReplayBuffer.add")
+        self.observations[self.pos] = obs
+        self.next_observations[self.pos] = next_obs
+        self.actions[self.pos] = action
+        self.rewards[self.pos] = reward
+        self.dones[self.pos] = done
+
+        self.pos = (self.pos + 1) % self.capacity
+        self.size = min(self.size + 1, self.capacity)
+
+
+        #raise NotImplementedError("Implement ReplayBuffer.add")
         # ==================================================================
 
     def sample(self, batch_size: int) -> Batch:
@@ -135,7 +145,26 @@ class ReplayBuffer:
 
         """
         # ==================== YOUR CODE HERE (Part 1b) ====================
-        raise NotImplementedError("Implement ReplayBuffer.sample")
+        idx = np.random.randint(0, self.size, size=batch_size)
+
+        obs = self.observations[idx]
+        next_obs = self.next_observations[idx]
+        actions = self.actions[idx]
+        rewards = self.rewards[idx]
+        dones = self.dones[idx]
+
+        def to_t(x):
+            return torch.as_tensor(x, device=self.device)
+
+        return Batch(
+            observations=to_t(obs),
+            actions=to_t(actions),
+            next_observations=to_t(next_obs),
+            rewards=to_t(rewards),
+            dones=to_t(dones),
+        )
+
+        #raise NotImplementedError("Implement ReplayBuffer.sample")
         # ==================================================================
 
 
@@ -144,7 +173,17 @@ def compute_td_targets(target_network, batch: Batch, gamma: float) -> torch.Tens
 
     """
     # ===================== YOUR CODE HERE (Part 2) =====================
-    raise NotImplementedError("Implement compute_td_targets")
+    
+    next_q = target_network(batch.next_observations)
+    next_q_max = next_q.max(dim=1).values
+
+    rewards = batch.rewards.flatten()
+    dones = batch.dones.flatten()
+
+    return rewards + gamma * next_q_max * (1.0 - dones)
+
+
+    #raise NotImplementedError("Implement compute_td_targets")
     # ===================================================================
 
 
