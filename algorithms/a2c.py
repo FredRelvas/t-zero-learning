@@ -114,7 +114,24 @@ def compute_n_step_returns(
         R_T = next_value.
     """
     # ===================== YOUR CODE HERE (Part 1) =====================
-    raise NotImplementedError("Implement compute_n_step_returns")
+    # A recorrência só roda de trás para frente: R_t depende de R_{t+1}, e o
+    # único valor conhecido é R_T = next_value, logo após o fim do rollout.
+    returns = torch.zeros_like(rewards)
+
+    # R_{t+1} corrente: começa no bootstrap V(s_T), usado pelos episódios que
+    # ainda estavam vivos no fim do rollout.
+    running = next_value
+
+    for t in reversed(range(rewards.shape[0])):
+        # (1 - dones[t]) corta o bootstrap quando o episódio terminou *neste*
+        # passo t: r_t continua valendo, o que viria depois não é deste
+        # episódio. Todos os operandos são linhas de forma (N,), então as
+        # colunas nunca se misturam — cada ambiente tem sua própria
+        # recorrência independente.
+        running = rewards[t] + gamma * (1.0 - dones[t]) * running
+        returns[t] = running
+
+    return returns
     # ===================================================================
 
 
@@ -132,7 +149,20 @@ def compute_policy_loss(
     *ascent*.
     """
     # ===================== YOUR CODE HERE (Part 2) =====================
-    raise NotImplementedError("Implement compute_policy_loss")
+    # A vantagem é o *peso* de cada log-probabilidade. Sem baseline o peso
+    # passa a ser o retorno cru — é exatamente a ablação da Q4.
+    advantages = returns - values if use_baseline else returns
+
+    # detach() é obrigatório: no gradiente de política o peso é uma constante.
+    # Sem ele o gradiente vazaria para o crítico e, como log π < 0 sempre, a
+    # derivada da perda em relação a V seria negativa — a descida empurraria
+    # V para cima indefinidamente, destruindo o crítico.
+    advantages = advantages.detach()
+
+    # Sinal trocado: minimizar esta perda equivale a *subir* log π das ações
+    # com vantagem positiva. A média (e não a soma) mantém a escala do
+    # gradiente independente do tamanho do lote.
+    return -(logprobs * advantages).mean()
     # ===================================================================
 
 

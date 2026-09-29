@@ -61,7 +61,22 @@ class DiscreteActorCritic(nn.Module):
         ``sample()``, ``log_prob(action)`` and ``entropy()``.
         """
         # ===================== YOUR CODE HERE (Part 3) =====================
-        raise NotImplementedError("Implement DiscreteActorCritic.get_action_and_value")
+        # Uma passada só pelo ator: (B, obs_dim) -> (B, n_actions) logits.
+        # Categorical(logits=...) normaliza internamente com log_softmax, o
+        # que é mais estável do que exponenciar e dividir na mão.
+        logits = self.actor(x)
+        dist = Categorical(logits=logits)
+
+        if action is None:
+            # deterministic serve à avaliação: pega a ação mais provável em vez
+            # de sortear. No treino sempre amostramos — é daí que vem toda a
+            # exploração do A2C, não há epsilon-greedy como no DQN.
+            action = logits.argmax(dim=1) if deterministic else dist.sample()
+
+        # Quando `action` vem de fora, avaliamos a log-probabilidade *dela*:
+        # é assim que a atualização reconstrói o grafo das ações já executadas
+        # no rollout (que foram amostradas sob no_grad).
+        return action, dist.log_prob(action), dist.entropy(), self.critic(x)
         # ===================================================================
 
     def act(self, x, deterministic: bool = False):
