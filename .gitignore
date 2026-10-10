@@ -217,7 +217,8 @@ logs/
 algorithms/dqn_solution.py
 *_solution.py
 
+docs/plans
+
 # artefatos locais do pipeline de relatorio
 ferramentas/cache/
 .DS_Store
-
