@@ -43,6 +43,15 @@ ALGOS = {
         rotulo=lambda r: (f"envs={r['envs']:<3} ns={r['ns']:<4} ent={r['ent']:<5} "
                           f"base={str(r['base']):<5} seed={r['seed']}"),
     ),
+    'ppo': dict(
+        projeto='fredrelvas-ceia/ppo-assignment',
+        keys=None,        # None = baixa o historico inteiro: o projeto mistura
+                          # runs de PPO e de A2C, que nao logam as mesmas metricas
+        todos_algos=True, # Parte 5 compara os dois algoritmos no mesmo projeto
+        campos=lambda c: dict(exp=c.get('exp_name'), algo=c.get('algorithm')),
+        ordem=lambda r: (r['algo'], r['exp'], r['seed']),
+        rotulo=lambda r: f"{r['exp']:<22} seed={r['seed']}",
+    ),
 }
 
 algo = sys.argv[1] if len(sys.argv) > 1 else 'a2c'
@@ -56,15 +65,20 @@ out = []
 for r in api.runs(projeto):
     if r.state != 'finished':
         continue
-    if r.config.get('algorithm') != algo:
+    if not spec.get('todos_algos') and r.config.get('algorithm') != algo:
         continue
     rec = dict(seed=r.config.get('seed'),
                eval_mean=r.summary.get('eval/mean_return'),
                eval_std=r.summary.get('eval/std_return'),
                url=r.url, series={})
     rec.update(spec['campos'](r.config))
-    h = r.history(keys=spec['keys'], samples=2000, pandas=False)
-    for k in spec['keys']:
+    if spec['keys'] is None:
+        h = [x for x in r.history(samples=2000, pandas=False)]
+        chaves = sorted({k for x in h for k in x if not k.startswith('_')} | {'_runtime'})
+    else:
+        h = r.history(keys=spec['keys'], samples=2000, pandas=False)
+        chaves = spec['keys']
+    for k in chaves:
         pts = [(x['_step'], x[k]) for x in h
                if x.get(k) is not None and not (isinstance(x[k], float) and math.isnan(x[k]))]
         rec['series'][k] = pts[::max(1, len(pts) // 600)]

@@ -145,7 +145,34 @@ def compute_gae(
         advantages + values`` (the critic's regression target).
     """
     # ===================== YOUR CODE HERE (Part 1) =====================
-    raise NotImplementedError("Implement compute_gae")
+    # Conversão de convenção — é aqui que nasce a maior parte dos erros.
+    # `dones[t]` é o done devolvido pelo passo ANTERIOR a t. O que interessa para
+    # o bootstrap de t é se o episódio acabou NO passo t, ou seja `dones[t+1]` —
+    # e `next_done` para o último passo. Deslocar uma posição dá exatamente a
+    # convenção do A2C (o próprio teste faz esse cat para comparar com ela).
+    next_values = torch.cat([values[1:], next_value.unsqueeze(0)], dim=0)
+    nonterminal = 1.0 - torch.cat([dones[1:], next_done.unsqueeze(0)], dim=0)
+
+    # delta_t: o erro de TD de um passo. Com nonterminal = 0 o bootstrap morre e
+    # sobra r_t - V(s_t), que é o certo — o que vem depois já é de outro
+    # episódio. Tudo (T, N), cada ambiente na sua coluna, nunca se misturam.
+    deltas = rewards + gamma * nonterminal * next_values - values
+
+    # GAE é a soma descontada dos deltas futuros, com gamma*lambda no lugar de
+    # gamma. Mesma recorrência do A2C, de trás para frente, e pelo mesmo motivo:
+    # A_t depende de A_{t+1}. O caso base agora é A_T = 0, não o bootstrap —
+    # depois do fim do rollout não existe delta algum (o V(s_T) já entrou via
+    # next_values no delta do último passo).
+    advantages = torch.zeros_like(rewards)
+    running = torch.zeros_like(next_value)
+
+    for t in reversed(range(rewards.shape[0])):
+        running = deltas[t] + gamma * gae_lambda * nonterminal[t] * running
+        advantages[t] = running
+
+    # Alvo do crítico. Com lambda = 1 isto é o retorno de n passos do A2C; com
+    # lambda = 0 é r_t + gamma*V(s_{t+1}), o alvo de TD(0). lambda interpola.
+    return advantages, advantages + values
     # ===================================================================
 
 
@@ -162,7 +189,29 @@ def compute_clipped_policy_loss(
     objective.
     """
     # ===================== YOUR CODE HERE (Part 2) =====================
-    raise NotImplementedError("Implement compute_clipped_policy_loss")
+    # Constantes do ponto de vista do gradiente: `oldlogprob` é da política que
+    # coletou (congelada) e a vantagem é só o peso, como no A2C. Sem o detach os
+    # testes de "não recebem gradiente" falham, e no treino o gradiente vazaria
+    # para o crítico pelo caminho da vantagem.
+    oldlogprob = oldlogprob.detach()
+    advantages = advantages.detach()
+
+    # Razão em espaço log: pi_new/pi_old = exp(log pi_new - log pi_old). Dividir
+    # as probabilidades direto perde precisão; subtrair os logs não.
+    logratio = newlogprob - oldlogprob
+    ratio = logratio.exp()
+
+    # O par de objetivos. O clamp é o que mata o gradiente: fora da banda a
+    # derivada de clip(r) em relação a r é 0, logo esse termo vira constante.
+    unclipped = ratio * advantages
+    clipped = torch.clamp(ratio, 1.0 - clip_coef, 1.0 + clip_coef) * advantages
+
+    # min() escolhe o pessimista, e é isso que faz o clipping ser assimétrico:
+    # ele só desliga o gradiente quando a atualização está EMPURRANDO r para
+    # fora da banda. Se r já está fora mas o passo o traz de volta, o termo não
+    # clipado é o menor e o gradiente continua fluindo. Sinal trocado porque
+    # descer esta loss é subir o objetivo.
+    return -torch.min(unclipped, clipped).mean()
     # ===================================================================
 
 
@@ -177,7 +226,24 @@ def approx_kl_and_clipfrac(
     ``clipfrac`` is the fraction of samples with ``|ratio - 1| > clip_coef``.
     """
     # ===================== YOUR CODE HERE (Part 3) =====================
-    raise NotImplementedError("Implement approx_kl_and_clipfrac")
+    # Diagnóstico, não termo de loss: nada aqui entra no backward, daí o no_grad
+    # (os testes checam requires_grad == False nos dois retornos).
+    with torch.no_grad():
+        logratio = newlogprob - oldlogprob
+        ratio = logratio.exp()
+
+        # KL aproximado de Schulman: média de (r - 1) - log r sobre as amostras.
+        # Essa expressão é >= 0 para todo r > 0, com igualdade só em r = 1, então
+        # o estimador nunca dá negativo — diferente de -log r (o `old_approx_kl`
+        # que o train() loga ao lado), que tem a média certa mas variância alta e
+        # troca de sinal.
+        approx_kl = ((ratio - 1.0) - logratio).mean()
+
+        # Fração de amostras em que o clipping estaria ativo. A comparação dá
+        # bool, precisa virar float antes da média.
+        clipfrac = ((ratio - 1.0).abs() > clip_coef).float().mean()
+
+    return approx_kl, clipfrac
     # ===================================================================
 
 

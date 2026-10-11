@@ -1,0 +1,49 @@
+# PPO assignment config — LunarLander-v3, FINAL (Parte 4).
+#
+# Resolve o ambiente: eval/mean_return e episodic_return_mean_last100 >= 200
+# nas seeds 1 e 2, com 1M passos (metade do orcamento de 2M).
+#
+# Mudancas em relacao a configs/ppo_lunarlander.yml, na ordem em que foram
+# feitas e com o diagnostico que motivou cada uma (ver relatorio_ppo.md):
+#   num_steps      128    -> 1024   rollout mais curto que o episodio
+#   num_minibatches 4     -> 32     mantem o minibatch em 128 e a contagem
+#                                   de passos de gradiente
+#   gamma          0.99   -> 0.999  0.99^500 esconde o bonus de pouso
+#   gae_lambda     0.95   -> 0.98   horizonte efetivo compativel com gamma
+#   learning_rate  2.5e-4 -> 1e-3   approx_kl ~0 e clipfrac ~0: rollout
+#                                   subaproveitado
+#   ent_coef       0.01   -> 0.001  entropia travada em ~1.0 de ln(4)=1.386:
+#                                   o agente pairava em vez de pousar
+
+algorithm: ppo
+env_id: LunarLander-v3
+seed: 1
+cuda: false
+total_timesteps: 1000000
+num_envs: 4
+
+track: true
+capture_video: true
+save_model: true
+checkpoint_every: 0
+
+network: DiscreteActorCritic
+network_kwargs:
+  activation: Tanh
+  hidden_layers_size: 64
+
+ppo:
+  learning_rate: 1.0e-3   # era 2.5e-4
+  anneal_lr: true
+  num_steps: 1024         # era 128
+  gamma: 0.999            # era 0.99
+  gae_lambda: 0.98        # era 0.95
+  num_minibatches: 32     # era 4
+  update_epochs: 4
+  norm_adv: true
+  clip_coef: 0.2
+  clip_vloss: true
+  ent_coef: 0.001         # era 0.01
+  vf_coef: 0.5
+  max_grad_norm: 0.5
+  target_kl: null

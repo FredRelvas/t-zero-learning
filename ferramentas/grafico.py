@@ -1,6 +1,6 @@
 """Motor de graficos em SVG puro (sem matplotlib).
 
-Compartilhado pelas atividades: figuras_dqn.py, figuras_a2c.py.
+Compartilhado pelas atividades: figuras_dqn.py, figuras_a2c.py, figuras_ppo.py.
 Convencoes: paleta categorica validada para daltonismo, linha cheia = seed 1,
 tracejada = seed 2, rotulo direto na ponta da linha, escala log onde a metrica
 varia ordens de grandeza.
@@ -105,6 +105,8 @@ def autodom(series, key, log=False, clip=None, pad=0.06, zero=False):
     while v <= hi + passo * 1e-9:
         ticks.append(round(v, 10))
         v += passo
+    if ticks[-1] < hi:          # o ultimo tick define o topo do dominio: sem esta
+        ticks.append(round(v, 10))   # linha, o pico da serie mais alta sai clipado
     return (ticks[0], ticks[-1]), ticks
 
 
@@ -150,7 +152,8 @@ def _rolling(pts, win):
 
 def chart(path, title, subtitle, key, series, ylab, ylog=False, ydom=None,
           yticks=None, yfmt=num, refline=None, endlabels=False, band=0,
-          clip=None, zero=False, ysym=None, smooth=0, ypos=False, xmax=500000):
+          clip=None, zero=False, ysym=None, smooth=0, ypos=False, xmax=500000,
+          xlab='passo de treino', xfmt=None):
     """Escreve um SVG em figuras/.
 
     series: lista de (rotulo, cor, registro, tracejada).
@@ -160,7 +163,10 @@ def chart(path, title, subtitle, key, series, ylab, ylog=False, ydom=None,
           (value_loss, explained_variance, advantage_std) sao ruidosas demais
           para o traco cru; e o mesmo alisamento que o W&B aplica na interface.
     ypos: impede o dominio de descer abaixo de zero (metricas nao-negativas).
+    xlab/xfmt: rotulo e formato do eixo x. O padrao e passo de ambiente em
+          milhares; a Parte 5 do PPO usa segundos de relogio no lugar.
     """
+    xfmt = xfmt or (lambda s: f'{s // 1000}k')
     if smooth:
         suav = []
         for rotulo, cor, rec, tracejada in series:
@@ -223,9 +229,9 @@ def chart(path, title, subtitle, key, series, ylab, ylog=False, ydom=None,
     for s in range(0, xmax + 1, xmax // 5):
         x = sx(s)
         p.append(f'<line x1="{x:.1f}" y1="{y1}" x2="{x:.1f}" y2="{y1+4}" stroke="{RULE}" stroke-width="1"/>')
-        p.append(f'<text x="{x:.1f}" y="{y1+18}" font-size="10.5" fill="{INK2}" text-anchor="middle">{s//1000}k</text>')
+        p.append(f'<text x="{x:.1f}" y="{y1+18}" font-size="10.5" fill="{INK2}" text-anchor="middle">{esc(xfmt(s))}</text>')
     p.append(f'<line x1="{x0}" y1="{y1}" x2="{x1}" y2="{y1}" stroke="{RULE}" stroke-width="1"/>')
-    p.append(f'<text x="{x0}" y="{H-8}" font-size="10.5" fill="{INK2}">passo de treino</text>')
+    p.append(f'<text x="{x0}" y="{H-8}" font-size="10.5" fill="{INK2}">{esc(xlab)}</text>')
     p.append(f'<text x="14" y="{(y0+y1)/2:.1f}" font-size="10.5" fill="{INK2}" text-anchor="middle" '
              f'transform="rotate(-90 14 {(y0+y1)/2:.1f})">{esc(ylab)}</text>')
 

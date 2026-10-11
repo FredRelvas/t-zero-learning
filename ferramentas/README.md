@@ -17,6 +17,8 @@ não a sobrescreve e a run vai para o projeto errado. Rode `unset WANDB_PROJECT`
 | `grafico.py` | motor de gráficos em SVG puro (sem matplotlib) — compartilhado |
 | `figuras_dqn.py` | séries da atividade de DQN |
 | `figuras_a2c.py` | séries da atividade de A2C |
+| `figuras_ppo.py` | séries da atividade de PPO (Partes 4 e 5) |
+| `svg_para_png.py` | SVG → PNG via `qlmanage`, e apaga os SVGs |
 | `md_para_html.py` | Markdown → HTML com o CSS de impressão A4 |
 
 ## 1. Baixar o histórico para cache local
@@ -24,9 +26,14 @@ não a sobrescreve e a run vai para o projeto errado. Rode `unset WANDB_PROJECT`
 ```bash
 python ferramentas/wandb_hist.py a2c                  # projeto padrão do algoritmo
 python ferramentas/wandb_hist.py dqn ENTITY/PROJETO   # outro projeto
+python ferramentas/wandb_hist.py ppo                  # PPO *e* A2C, para a comparação
 ```
 
-Filtra por `config.algorithm`, então um projeto com runs misturadas não atrapalha.
+`dqn` e `a2c` filtram por `config.algorithm` e baixam uma lista fixa de métricas. O `ppo` é
+diferente em dois pontos, porque a Parte 5 compara dois algoritmos dentro do mesmo projeto:
+`todos_algos=True` desliga o filtro, e `keys=None` baixa o histórico inteiro — as runs de A2C não
+logam `approx_kl` nem `clipfrac`, e pedir uma chave inexistente devolveria série vazia. O
+`_runtime` vem junto, que é o que permite plotar retorno × tempo de relógio.
 
 ## 2. Gerar os gráficos
 
@@ -53,19 +60,12 @@ mesmo matiz, rótulo direto na ponta de cada linha.
 ## 3. Converter SVG em PNG (macOS) e descartar os SVGs
 
 ```bash
-T=$(mktemp -d)
-qlmanage -t -s 1980 -o "$T" figuras/*.svg >/dev/null 2>&1
-python - "$T" <<'PY'
-from PIL import Image; import glob, os, sys
-T = sys.argv[1]
-for f in sorted(glob.glob(T + '/*.svg.png')):
-    im = Image.open(f); w, _ = im.size
-    im.crop((0, 0, w, round(w * 390 / 660))).save('figuras/' + os.path.basename(f).replace('.svg.png', '.png'))
-PY
-rm -f figuras/*.svg
+python ferramentas/svg_para_png.py          # todos os SVGs de figuras/
+python ferramentas/svg_para_png.py ppo_     # só os de um prefixo
 ```
 
-O `qlmanage` gera a miniatura em canvas quadrado; o corte devolve a proporção 660×390 do SVG.
+O `qlmanage` gera a miniatura em canvas quadrado; o script corta de volta para a proporção
+660×390 do SVG e remove os `.svg`. Só os PNGs vão para o repositório.
 
 ## 4. Markdown → PDF
 
@@ -76,6 +76,12 @@ python ferramentas/md_para_html.py relatorio.md
   --print-to-pdf=relatorio.pdf --virtual-time-budget=6000 relatorio.html
 ```
 
-`md_para_html.py` cobre o subconjunto de Markdown usado no relatório e aplica o CSS de
-impressão: A4, margens de 17-18 mm, corpo 10,5 pt, figuras em duas por linha (uma sozinha
-na linha ocupa a largura toda). O limite de 3 páginas da atividade foi conferido assim.
+`md_para_html.py` cobre o subconjunto de Markdown usado nos relatórios — títulos, parágrafos,
+`código`, **negrito**, *itálico*, links, linhas de figuras e **tabelas de pipe** — e aplica o CSS
+de impressão A4. Uma linha com 1, 2, 3 ou 4 figuras vira `.cols1`…`.cols4`: três por linha é o
+padrão, quatro viram 2+2. Confira a contagem de páginas no PDF antes de entregar; dá para contar
+sem abrir:
+
+```bash
+python -c "import re;d=open('relatorio_ppo.pdf','rb').read();print(len(re.findall(rb'/Type\s*/Page[^s]',d)))"
+```
