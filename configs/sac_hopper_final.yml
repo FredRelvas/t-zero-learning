@@ -1,0 +1,58 @@
+# SAC assignment — Hopper-v5, CONFIG FINAL da Parte 3.
+#
+# Uma unica mudanca em relacao a configs/sac_hopper.yml:
+#
+#   sac.updates_per_step: 1 -> 4
+#
+# Motivo observado: nos 3 seeds do config inicial (runs `sac_hopper` no projeto
+# sac-assignment) o `losses/qf1_values` termina em 203-236 ainda subindo e o
+# `charts/q_minus_return` fecha negativo nos tres (-2, -10, -18): o critico
+# avalia o inicio do episodio ABAIXO do que o episodio rendeu, ou seja o
+# orcamento de 100k passos acaba antes de ele convergir. Mais passos de
+# gradiente por passo de ambiente atacam exatamente isso, e o diagnostico
+# confirma: com ups=4 (`sac_h_m4`) o q_minus_return vira +16/+32/+16.
+#
+# Resultado, 3 seeds, media (min-max):
+#   inicial    eval 1598 ( 677-2416)   r_last100 1233 (1004-1470)
+#   ups=4      eval 2619 (1470-3287)   r_last100 1570 (1398-1771)
+# O inicial alcanca 1233 em 1 de 3 seeds; o ups=4 em 3 de 3 (73k, 80k, 89k).
+#
+# Candidatos descartados (ver relatorio): batch_size=512 (`sac_h_m2`) eliminou
+# o pico de loss do critico mas nao mudou o retorno; a combinacao ups=2+b512
+# (`sac_h_m3`) ficou abaixo do ups=2 sozinho (`sac_h_m1`).
+#
+# Custo: 4x os passos de gradiente nos mesmos 100k passos de ambiente. O
+# enunciado deixa o tempo de relogio livre; ~50 min por seed com 6 runs em
+# paralelo nesta maquina, ~15-20 min sozinho.
+
+algorithm: sac
+env_id: Hopper-v5
+seed: 1
+cuda: false
+total_timesteps: 100000
+num_envs: 1
+
+track: true
+capture_video: true
+save_model: true
+checkpoint_every: 25000
+
+network: SACAgent
+network_kwargs:
+  activation: ReLU
+  hidden_layers_size: 256
+
+sac:
+  buffer_size: 1000000
+  gamma: 0.99
+  tau: 0.005
+  batch_size: 256
+  learning_starts: 5000
+  policy_lr: 3.0e-4
+  q_lr: 1.0e-3
+  policy_frequency: 2
+  target_network_frequency: 1
+  alpha: 0.2
+  autotune: true
+  updates_per_step: 4    # <-- a mudanca da Parte 3
+  clipped_double_q: true

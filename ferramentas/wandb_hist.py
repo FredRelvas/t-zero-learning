@@ -43,6 +43,15 @@ ALGOS = {
         rotulo=lambda r: (f"envs={r['envs']:<3} ns={r['ns']:<4} ent={r['ent']:<5} "
                           f"base={str(r['base']):<5} seed={r['seed']}"),
     ),
+    'sac': dict(
+        projeto='fredrelvas-ceia/sac-assignment',
+        keys=None,        # None = baixa o historico inteiro: o SAC loga metricas que
+                          # o PPO continuo nao tem (alpha, entropy, q_minus_return)
+        todos_algos=True, # Parte 5 compara SAC e PPO no mesmo projeto
+        campos=lambda c: dict(exp=c.get('exp_name'), algo=c.get('algorithm')),
+        ordem=lambda r: (r['algo'], r['exp'], r['seed']),
+        rotulo=lambda r: f"{r['exp']:<22} seed={r['seed']}",
+    ),
     'ppo': dict(
         projeto='fredrelvas-ceia/ppo-assignment',
         keys=None,        # None = baixa o historico inteiro: o projeto mistura

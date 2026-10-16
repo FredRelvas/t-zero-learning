@@ -151,7 +151,7 @@ def _rolling(pts, win):
 
 
 def chart(path, title, subtitle, key, series, ylab, ylog=False, ydom=None,
-          yticks=None, yfmt=num, refline=None, endlabels=False, band=0,
+          yticks=None, yfmt=num, refline=None, endlabels=False, dashlabels=False, band=0,
           clip=None, zero=False, ysym=None, smooth=0, ypos=False, xmax=500000,
           xlab='passo de treino', xfmt=None):
     """Escreve um SVG em figuras/.
@@ -162,6 +162,9 @@ def chart(path, title, subtitle, key, series, ylab, ylog=False, ydom=None,
     smooth: se > 0, media movel dessa largura. Metricas logadas por atualizacao
           (value_loss, explained_variance, advantage_std) sao ruidosas demais
           para o traco cru; e o mesmo alisamento que o W&B aplica na interface.
+    dashlabels: por padrao o rotulo de fim de linha (e o destaque visual) vai
+          na linha cheia. Com True ele segue QUEM TEM ROTULO, mesmo tracejada --
+          serve quando a seed que interessa nao e a seed 1.
     ypos: impede o dominio de descer abaixo de zero (metricas nao-negativas).
     xlab/xfmt: rotulo e formato do eixo x. O padrao e passo de ambiente em
           milhares; a Parte 5 do PPO usa segundos de relogio no lugar.
@@ -197,6 +200,8 @@ def chart(path, title, subtitle, key, series, ylab, ylog=False, ydom=None,
     # layout da legenda primeiro: define onde a area de plot comeca
     leg, lx, ly = [], ML, 55
     for label, color, _, _ in series:
+        if not label:        # rotulo vazio = seed repetida do mesmo config: o
+            continue         # estilo de linha ja esta explicado no subtitulo
         w = 21 + 6.2 * len(label)
         if lx + w > W - 16:
             lx, ly = ML, ly + 16
@@ -255,7 +260,10 @@ def chart(path, title, subtitle, key, series, ylab, ylog=False, ydom=None,
                if v is not None and not (isinstance(v, float) and math.isnan(v))]
         if not pts:
             continue
-        dash = ' stroke-dasharray="5 4"' if dashed else ''
+        # dashed: False = linha cheia, True = tracejada (seed 2), ou um padrao
+        # SVG proprio como '1.5 3' -- o SAC tem 3 seeds por config e precisa de
+        # um terceiro estilo (pontilhada) no mesmo matiz.
+        dash = f' stroke-dasharray="{"5 4" if dashed is True else dashed}"' if dashed else ''
         if band:
             env = _rolling(pts, band)
             topo = ' L'.join(f'{sx(s):.1f},{sy(mx):.1f}' for s, _mn, _md, mx in env)
@@ -264,10 +272,11 @@ def chart(path, title, subtitle, key, series, ylab, ylog=False, ydom=None,
             linha = [(s, md) for s, _mn, md, _mx in env]
         else:
             linha = pts
+        destaque = bool(label) if dashlabels else not dashed
         d = 'M' + ' L'.join(f'{sx(s):.1f},{sy(v):.1f}' for s, v in linha)
         p.append(f'<path d="{d}" fill="none" stroke="{color}" stroke-width="2" '
-                 f'stroke-linejoin="round" stroke-linecap="round"{dash} opacity="{0.75 if dashed else 1}"/>')
-        if endlabels and not dashed:
+                 f'stroke-linejoin="round" stroke-linecap="round"{dash} opacity="{1 if destaque else 0.75}"/>')
+        if endlabels and destaque:
             s, v = linha[-1]
             ends.append([sy(v), label, color, sx(s)])
 

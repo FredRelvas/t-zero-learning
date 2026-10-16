@@ -22,6 +22,8 @@ for b in blocks:
     b = b.strip()
     if b.startswith('# '):
         out.append(f'<h1>{inline(b[2:])}</h1>')
+    elif b.startswith('### '):
+        out.append(f'<h3>{inline(b[4:])}</h3>')
     elif b.startswith('## '):
         out.append(f'<h2>{inline(b[3:])}</h2>')
     elif b.startswith('|'):
@@ -30,8 +32,10 @@ for b in blocks:
         # a segunda linha e o separador (|---|---|), nao e conteudo
         corpo = [c for c in celulas[1:] if not all(set(x) <= set('-: ') for x in c)]
         cab = ''.join(f'<th>{inline(c)}</th>' for c in celulas[0])
-        tr = ''.join('<tr>' + ''.join(f'<td>{inline(c)}</td>' for c in linha) + '</tr>'
-                     for linha in corpo)
+        def cel(c):
+            nw = ' class="nw"' if len(c) <= 18 and any(d.isdigit() for d in c) else ''
+            return f'<td{nw}>{inline(c)}</td>'
+        tr = ''.join('<tr>' + ''.join(cel(c) for c in linha) + '</tr>' for linha in corpo)
         out.append(f'<table><thead><tr>{cab}</tr></thead><tbody>{tr}</tbody></table>')
     elif b.startswith('!['):
         imgs = re.findall(r'!\[([^\]]*)\]\(([^)]+)\)', b)
@@ -46,6 +50,7 @@ CSS = """
 * { box-sizing: border-box; }
 body { margin:0; font: 10pt/1.38 Helvetica, Arial, sans-serif; color:#111; }
 h1 { font-size: 16pt; margin: 0 0 6pt; letter-spacing:-.2pt; }
+h3 { font-size: 10pt; margin: 7pt 0 3pt; break-after: avoid; }
 h2 { font-size: 11.5pt; margin: 10pt 0 4pt; padding-top: 5pt;
      border-top: 1px solid #d8d7d3; break-after: avoid; }
 p { margin: 0 0 6pt; text-align: justify; hyphens: auto; }
@@ -59,6 +64,9 @@ a { color:#1c5cab; text-decoration: none; word-break: break-all; }
    e o que impede a figura orfa de esticar ate a largura toda. */
 .figs figure { margin:0; flex:0 1 calc(50% - 1.5mm); min-width:0; }
 .figs.cols1 figure { flex-basis: 72%; }
+/* numa linha de 3 figuras (2+1), a que desce sozinha pode ser maior: ela tem a
+   largura toda disponivel e e sempre a figura-resumo do grupo. */
+.figs.cols3 figure:last-child { flex-basis: 62%; }
 .figs img { width:100%; height:auto; display:block; }
 strong { font-weight:650; }
 table { border-collapse: collapse; width:100%; font-size: 8.8pt; margin: 4pt 0 7pt;
@@ -66,8 +74,10 @@ table { border-collapse: collapse; width:100%; font-size: 8.8pt; margin: 4pt 0 7
 th { text-align:left; font-weight:650; border-bottom: 1px solid #b9b8b4; padding: 2.2pt 4pt; }
 td { border-bottom: 1px solid #e8e7e4; padding: 2.2pt 4pt; vertical-align: top; }
 td code, th code { font-size: 8.2pt; }
-/* colunas numericas estreitas: sem isso um valor como 2,5e-4 quebra em duas linhas */
-td:nth-child(2), td:nth-child(3), th:nth-child(2), th:nth-child(3) { white-space: nowrap; }
+/* celulas curtas com numero nao quebram: sem isso um valor como 2,5e-4 vira
+   duas linhas. Marcado por conteudo (ver `cel` acima), e nao por posicao: uma
+   coluna de texto longo na mesma posicao estouraria a largura da pagina. */
+td.nw { white-space: nowrap; }
 """
 titulo = next((b[2:].strip() for b in blocks if b.startswith('# ')), SRC)
 doc = ('<!doctype html><html lang="pt-BR"><head><meta charset="utf-8">'

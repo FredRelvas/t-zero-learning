@@ -143,7 +143,29 @@ def squashed_gaussian_sample(
         ``tanh(mean) * action_scale + action_bias`` (B, A).
     """
     # ===================== YOUR CODE HERE (Part 1) =====================
-    raise NotImplementedError("Implement squashed_gaussian_sample")
+    # Reparametrização: u = média + desvio * ruído, com `rsample()` e não
+    # `sample()`. A loss do ator precisa que o gradiente de Q(s, a) chegue em
+    # `mean` e `log_std` *atravessando* a ação; com `sample()` a ação seria uma
+    # constante e o ator nunca aprenderia.
+    std = log_std.exp()
+    normal = Normal(mean, std)
+    u = normal.rsample()
+    y = torch.tanh(u)
+    action = y * action_scale + action_bias
+
+    # Mudança de variáveis. O tanh comprime a reta inteira dentro de
+    # [low, high], então a densidade de `action` é mais alta que a de `u`: é
+    # preciso descontar o log do jacobiano da/du = action_scale * (1 - tanh²u).
+    # O 1e-6 mantém o log finito quando o ator satura o tanh e 1 - y² chega a
+    # zero — o que acontece de verdade no fim do treino.
+    log_prob = normal.log_prob(u) - torch.log(action_scale * (1 - y.pow(2)) + 1e-6)
+    # Gaussiana diagonal e jacobiano diagonal: o log-determinante é a soma sobre
+    # as dimensões da ação. O keepdim dá a forma (B, 1) que o resto espera.
+    log_prob = log_prob.sum(1, keepdim=True)
+
+    # Ação determinística da avaliação: a média espremida, sem ruído nenhum.
+    mean_action = torch.tanh(mean) * action_scale + action_bias
+    return action, log_prob, mean_action
     # ===================================================================
 
 
@@ -168,7 +190,15 @@ def compute_soft_q_target(
     Returns a (B,) tensor.
     """
     # ===================== YOUR CODE HERE (Part 2) =====================
-    raise NotImplementedError("Implement compute_soft_q_target")
+    # Valor soft de s': o Q pessimista — o mínimo dos dois críticos-alvo, contra
+    # a superestimação — mais o bônus de entropia -alpha * log pi(a'|s'). O que
+    # o crítico aprende é soma de r + alpha * H(pi), não a soma de r sozinha.
+    # O mínimo vem de fora: quem chama passa `pick_q2`, que repete q1 na ablação
+    # de um crítico só, então aqui não existe caso especial.
+    soft_next_value = torch.min(next_q1, next_q2) - alpha * next_log_pi
+    # Transição terminal não faz bootstrap. `dones` guarda só `terminations`:
+    # uma truncação por limite de tempo continua descontando o futuro.
+    return rewards + gamma * (1.0 - dones) * soft_next_value
     # ===================================================================
 
 
